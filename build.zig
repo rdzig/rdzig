@@ -1,4 +1,4 @@
-const latest_version = "4.6";
+const latest_version = "26.1-stable";
 
 pub fn build(b: *Build) !void {
     //

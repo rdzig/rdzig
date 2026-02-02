@@ -2,13 +2,14 @@
     .name = .gdzig_example,
     .fingerprint = 0x215ba1d8ad1afa53,
     .version = "0.0.0",
+    .minimum_zig_version = "0.15.1",
     .dependencies = .{
         .gdzig = .{
             .path = "../",
         },
         .godot = .{
-            .url = "git+https://github.com/gdzig/godot-versions#07c199a34f4c6414afb513026cd1f225f6751913",
-            .hash = "godot-0.0.0-Nast2hpTBgBNoGXh_OiQ50wnJGvOX9kSuDmIRL4Z8Kne",
+            .url = "git+https://github.com/rdzig/redot-versions.git#d382152b8c08a34a042b702af0ceba979fe4851b",
+            .hash = "redot-0.0.0-k73Qf_PwAABHWn752mMBeUheYg5HPMemkwcix_X7RsbV",
         },
     },
     .paths = .{

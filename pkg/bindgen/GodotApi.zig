@@ -1,5 +1,6 @@
 const GodotApi = @This();
 
+redot_header: Header,
 header: Header,
 builtin_class_sizes: []BuiltinSize,
 builtin_class_member_offsets: []BuiltinMemberOffset,
@@ -16,6 +17,7 @@ pub const Header = struct {
     version_minor: i64,
     version_patch: i64,
     version_status: []const u8,
+    version_status_version: ?u8 = null,
     version_build: []const u8,
     version_full_name: []const u8,
     precision: ?[]const u8 = null,
