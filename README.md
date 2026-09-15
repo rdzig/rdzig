@@ -9,10 +9,10 @@ expected until a stable version is released. Issue reports, feature requests, an
 
 ## Prerequisites
 
-1. zig 0.15.1+
-2. godot 4.4+
+1. zig 0.16.0+
+2. redot 26.2+ (downloaded automatically via redot-versions, or provide one with `-Dredot-path=<path>`)
 
-**Note:** We are targeting stable releases of Zig only. 0.16.x is not currently supported.
+**Note:** We are targeting stable releases of Zig only.
 
 ## Usage:
 

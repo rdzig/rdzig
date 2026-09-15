@@ -1,4 +1,4 @@
-const latest_version = "26.1-stable";
+const latest_version = "26.2-stable";
 
 pub fn build(b: *Build) !void {
     //
@@ -9,8 +9,8 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
     const precision = b.option([]const u8, "precision", "Floating point precision, either `float` or `double` [default: `float`]") orelse "float";
     const architecture = b.option([]const u8, "arch", "32") orelse "64";
-    const godot_version = b.option([]const u8, "godot-version", "Download and use this Godot version (e.g. `latest` or `4.5`)");
-    const godot_path = b.option([]const u8, "godot-path", "Path to a Godot executable");
+    const redot_version = b.option([]const u8, "redot-version", "Download and use this Redot version (e.g. `latest` or `26.2`)");
+    const redot_path = b.option([]const u8, "redot-path", "Path to a Redot executable");
 
     //
     // Steps
@@ -27,41 +27,41 @@ pub fn build(b: *Build) !void {
     const oopz = b.dependency("oopz", .{});
 
     //
-    // Godot
+    // Redot
     //
 
-    // Godot executable for the host (used for bindgen, running editor, etc.)
-    const godot_exe_host: ?Build.LazyPath = blk: {
-        if (godot_path) |p| {
+    // Redot executable for the host (used for bindgen, running editor, etc.)
+    const redot_exe_host: ?Build.LazyPath = blk: {
+        if (redot_path) |p| {
             break :blk .{ .cwd_relative = p };
         }
-        if (godot_version) |v| {
-            break :blk godot.executable(b, b.graph.host, v);
+        if (redot_version) |v| {
+            break :blk redot.executable(b, b.graph.host, v);
         }
-        if (b.findProgram(&.{"godot"}, &.{}) catch null) |p| {
+        if (b.findProgram(&.{"redot"}, &.{}) catch null) |p| {
             break :blk .{ .cwd_relative = p };
         }
-        break :blk godot.executable(b, b.graph.host, latest_version);
+        break :blk redot.executable(b, b.graph.host, latest_version);
     };
 
-    // Godot executable for the target (used for running tests)
+    // Redot executable for the target (used for running tests)
     // This enables cross-platform testing with -fwine
-    const godot_exe_target: ?Build.LazyPath = blk: {
-        if (godot_path) |p| {
+    const redot_exe_target: ?Build.LazyPath = blk: {
+        if (redot_path) |p| {
             // If user specifies a path, assume it's for the target
             break :blk .{ .cwd_relative = p };
         }
         const tgt = if (target.result.cpu.arch.isWasm()) b.graph.host else target;
-        if (godot_version) |v| {
-            break :blk godot.executable(b, tgt, v);
+        if (redot_version) |v| {
+            break :blk redot.executable(b, tgt, v);
         }
-        break :blk godot.executable(b, tgt, latest_version);
+        break :blk redot.executable(b, tgt, latest_version);
     };
 
     const headers = blk: {
-        const api_header_source: godot.HeaderSource = if (godot_path != null) .{ .exe = godot_exe_host.? } else if (godot_version) |v| .{ .version = v } else .{ .version = latest_version };
-        const gdextension_interface_h = godot.headers(b, b.graph.host, api_header_source).path(b, "gdextension_interface.h");
-        const extension_api_json = godot.headers(b, b.graph.host, api_header_source).path(b, "extension_api.json");
+        const api_header_source: redot.HeaderSource = if (redot_path != null) .{ .exe = redot_exe_host.? } else if (redot_version) |v| .{ .version = v } else .{ .version = latest_version };
+        const gdextension_interface_h = redot.headers(b, b.graph.host, api_header_source).path(b, "gdextension_interface.h");
+        const extension_api_json = redot.headers(b, b.graph.host, api_header_source).path(b, "extension_api.json");
 
         const write = b.addWriteFiles();
         _ = write.addCopyFile(gdextension_interface_h, "gdextension_interface.h");
@@ -69,8 +69,8 @@ pub fn build(b: *Build) !void {
         break :blk write.getDirectory();
     };
 
-    if (godot_exe_target) |exe| {
-        b.addNamedLazyPath("godot", exe);
+    if (redot_exe_target) |exe| {
+        b.addNamedLazyPath("redot", exe);
     }
     b.addNamedLazyPath("gdextension_interface.h", headers.path(b, "gdextension_interface.h"));
     b.addNamedLazyPath("extension_api.json", headers.path(b, "extension_api.json"));
@@ -154,16 +154,22 @@ pub fn build(b: *Build) !void {
     var tests_common_run: ?*Build.Step.Run = null;
 
     if (!target.result.cpu.arch.isWasm()) { // Do not add test for web targets.
-        const tests_gdzig = b.addTest(.{ .root_module = gdzig_mod });
-        const tests_common = b.addTest(.{ .root_module = common_mod });
+        // NOTE: LLVM backend required - the 0.16 self-hosted linker chokes on
+        // GCC 16 crt files (R_X86_64_PC64 in .sframe).
+        const tests_gdzig = b.addTest(.{ .root_module = gdzig_mod, .use_llvm = true });
+        const tests_common = b.addTest(.{ .root_module = common_mod, .use_llvm = true });
         tests_gdzig_run = b.addRunArtifact(tests_gdzig);
         tests_common_run = b.addRunArtifact(tests_common);
 
-        var tests_dir = try std.fs.cwd().openDir(b.path("test").getPath2(b, null), .{ .iterate = true });
-        defer tests_dir.close();
+        var tests_dir = try std.Io.Dir.cwd().openDir(
+            b.graph.io, 
+            b.path("test").getPath2(b, null), 
+            .{ .iterate = true }
+        );
+        defer tests_dir.close(b.graph.io);
 
         var iter = tests_dir.iterate();
-        while (iter.next() catch null) |entry| {
+        while (iter.next(b.graph.io) catch null) |entry| {
             if (entry.kind != .directory) continue;
 
             const test_mod = b.createModule(.{
@@ -197,11 +203,18 @@ pub fn build(b: *Build) !void {
     // Default step
     //
 
-    b.installDirectory(.{
+    // NOTE: the bindings install writes back into src/, which the lib
+    // compile reads (WriteFiles copy). Order it after the lib so the two
+    // don't race under parallel builds (ghost tmp files fail the
+    // WriteFiles cache check). addInstallDirectory (manual wiring) is
+    // used instead of installDirectory so the dependency can be set.
+    const install_bindings = b.addInstallDirectory(.{
         .source_dir = bindings,
         .install_dir = .{ .custom = "../" },
         .install_subdir = "src",
     });
+    install_bindings.step.dependOn(&gdzig_lib.step);
+    b.getInstallStep().dependOn(&install_bindings.step);
     b.installArtifact(bindgen_exe);
     b.installDirectory(.{
         .source_dir = gdzig_lib.getEmittedDocs(),
@@ -215,25 +228,10 @@ pub fn build(b: *Build) !void {
     });
 }
 
-fn getGodotVersion(b: *Build, p: Build.LazyPath) []const u8 {
-    const result = std.process.Child.run(.{
-        .allocator = b.allocator,
-        .argv = &.{ p.getPath2(b, null), "--version" },
-    }) catch @panic("Failed to run godot --version");
-    const output = std.mem.trim(u8, result.stdout, &std.ascii.whitespace);
-
-    var parts = std.mem.splitScalar(u8, output, '.');
-    const major = parts.next() orelse @panic("Failed to parse major version");
-    const minor = parts.next() orelse @panic("Failed to parse minor version");
-    const patch = parts.next() orelse @panic("Failed to parse patch version");
-
-    return b.fmt("{s}.{s}.{s}", .{ major, minor, patch });
-}
-
 const std = @import("std");
 const Build = std.Build;
 
-const godot = @import("godot");
+const redot = @import("redot");
 
 const api = @import("build/api.zig");
 pub const addExtension = api.addExtension;

@@ -25,12 +25,14 @@ const TestMapping = struct {
 /// State for the test runner
 const Runner = struct {
     allocator: Allocator,
+    io: Io,
+    base_environ: *const std.process.Environ.Map,
     server: ZigServer,
     test_mappings: std.ArrayListUnmanaged(TestMapping),
     string_bytes: std.ArrayListUnmanaged(u8),
     test_name_indices: std.ArrayListUnmanaged(u32),
 
-    fn init(allocator: Allocator, in: *Io.Reader, out: *Io.Writer) !Runner {
+    fn init(allocator: Allocator, io: Io, base_environ: *const std.process.Environ.Map, in: *Io.Reader, out: *Io.Writer) !Runner {
         const server = try ZigServer.init(.{
             .in = in,
             .out = out,
@@ -39,6 +41,8 @@ const Runner = struct {
 
         return .{
             .allocator = allocator,
+            .io = io,
+            .base_environ = base_environ,
             .server = server,
             .test_mappings = .empty,
             .string_bytes = .empty,
@@ -100,10 +104,10 @@ const Runner = struct {
     fn collectFolderMetadata(self: *Runner, folder: []const u8, folder_idx: u32) !void {
         const folder_name = std.fs.path.basename(folder);
 
-        // Spawn Godot with stdin/stdout piped
-        var child = try self.spawnGodot(folder);
+        // Spawn Redot with stdin/stdout piped
+        var child = try self.spawnRedot(folder);
         defer {
-            _ = child.wait() catch {};
+            _ = child.wait(self.io) catch {};
         }
 
         // Send query_metadata command
@@ -154,10 +158,16 @@ const Runner = struct {
     }
 
     fn handleRunTest(self: *Runner, global_index: u32) !void {
+        // Notify the build runner that the requested test is starting.
+        // Required since Zig 0.16: without test_started the runner cannot
+        // attribute the following test_results message and panics.
+        try self.server.serveMessageHeader(.{ .tag = .test_started, .bytes_len = 0 });
+        try self.server.out.flush();
+
         if (global_index >= self.test_mappings.items.len) {
             try self.server.serveTestResults(.{
                 .index = global_index,
-                .flags = .{ .fail = true, .skip = false, .leak = false, .fuzz = false },
+                .flags = .{ .status = .fail, .fuzz = false, .log_err_count = 0, .leak_count = 0 },
             });
             return;
         }
@@ -165,10 +175,10 @@ const Runner = struct {
         const mapping = self.test_mappings.items[global_index];
         const folder = options.test_folders[mapping.folder_index];
 
-        // Spawn Godot
-        var child = try self.spawnGodot(folder);
+        // Spawn Redot
+        var child = try self.spawnRedot(folder);
         defer {
-            _ = child.wait() catch {};
+            _ = child.wait(self.io) catch {};
         }
 
         // Send run_test command
@@ -194,40 +204,40 @@ const Runner = struct {
             }
         }
 
-        // Send exit command
+        // Send exit command (the deferred wait reaps the child;
+        // Child.wait is not idempotent, so wait exactly once).
         self.sendCommand(&child, .exit) catch {};
 
-        // Wait for child to exit
-        _ = child.wait() catch {};
-
-        // If test failed, print Godot's output to stderr so user sees stack trace
+        // If test failed, print Redot's output to stderr so user sees stack trace
         if (failed and godot_output.items.len > 0) {
-            std.fs.File.stderr().writeAll(godot_output.items) catch {};
+            var err_buf: [4096]u8 = undefined;
+            var err_writer = std.Io.File.stderr().writer(self.io, &err_buf);
+            err_writer.interface.writeAll(godot_output.items) catch {};
+            err_writer.interface.flush() catch {};
         }
 
         // Send result to build system
         try self.server.serveTestResults(.{
             .index = global_index,
             .flags = .{
-                .fail = failed,
-                .skip = false,
-                .leak = false,
+                .status = if (failed) .fail else .pass,
                 .fuzz = false,
+                .log_err_count = 0,
+                .leak_count = 0,
             },
         });
     }
 
     /// Send a command to the child process stdin
     fn sendCommand(self: *Runner, child: *std.process.Child, cmd: protocol.Command) !void {
-        _ = self;
         const stdin = child.stdin orelse return error.NoStdin;
         var buf: [4096]u8 = undefined;
-        var writer = std.fs.File.Writer.initStreaming(stdin, &buf);
+        var writer = stdin.writer(self.io, &buf);
         try protocol.writeCommand(&writer.interface, cmd);
         try writer.interface.flush();
     }
 
-    /// Read lines from Godot's stdout until we get an IPC response.
+    /// Read lines from Redot's stdout until we get an IPC response.
     /// Non-IPC lines are collected in godot_output for error display.
     /// Uses direct read() to avoid Windows pipe issues with pread/overlapped I/O.
     /// See: https://github.com/ziglang/zig/issues/25291
@@ -246,7 +256,7 @@ const Runner = struct {
             while (true) {
                 // Refill buffer if empty
                 if (buf_start >= buf_end) {
-                    const n = stdout.read(&read_buf) catch return null;
+                    const n = stdout.readStreaming(self.io, &.{&read_buf}) catch return null;
                     if (n == 0) return null; // EOF
                     buf_start = 0;
                     buf_end = n;
@@ -274,39 +284,36 @@ const Runner = struct {
         }
     }
 
-    fn spawnGodot(self: *Runner, folder: []const u8) !std.process.Child {
+    fn spawnRedot(self: *Runner, folder: []const u8) !std.process.Child {
         // Copy existing environment and add test mode flag
-        var env_map = std.process.getEnvMap(self.allocator) catch return error.EnvironmentError;
+        var env_map = try self.base_environ.clone(self.allocator);
         defer env_map.deinit();
 
         try env_map.put("GDZIG_TEST_MODE", "1");
 
-        var child = std.process.Child.init(
-            &.{ options.godot_exe, "--headless", "--path", folder, "--quit-after", "60" },
-            self.allocator,
-        );
-        child.env_map = &env_map;
-        child.stdin_behavior = .Pipe;
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Pipe;
+        const child = try std.process.spawn(self.io, .{
+            .argv = &.{ options.redot_exe, "--headless", "--path", folder, "--quit-after", "60" },
+            .environ_map = &env_map,
+            .stdin = .pipe,
+            .stdout = .pipe,
+            .stderr = .pipe,
+        });
 
-        try child.spawn();
         return child;
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const io = init.io;
+    const allocator = init.gpa;
 
     var stdin_buf: [4096]u8 = undefined;
     var stdout_buf: [4096]u8 = undefined;
 
-    var stdin_reader = std.fs.File.Reader.initStreaming(std.fs.File.stdin(), &stdin_buf);
-    var stdout_writer = std.fs.File.Writer.initStreaming(std.fs.File.stdout(), &stdout_buf);
+    var stdin_reader = std.Io.File.stdin().reader(io, &stdin_buf);
+    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buf);
 
-    var runner = try Runner.init(allocator, &stdin_reader.interface, &stdout_writer.interface);
+    var runner = try Runner.init(allocator, io, init.environ_map, &stdin_reader.interface, &stdout_writer.interface);
     defer runner.deinit();
 
     try runner.run();

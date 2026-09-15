@@ -50,27 +50,31 @@ fn exit(_: ?*anyopaque, _: gdzig.c.GDExtensionInitializationLevel) callconv(.c) 
 
 /// Run the test server. Reads commands from stdin, writes responses to stdout.
 fn run() void {
-    // Check if we should run (env var signals test mode)
-    const test_mode = std.process.getEnvVarOwned(gdzig.engine_allocator, "GDZIG_TEST_MODE") catch |err| switch (err) {
-        error.EnvironmentVariableNotFound => return,
-        else => return,
-    };
-    defer gdzig.engine_allocator.free(test_mode);
+    // Check if we should run (env var signals test mode).
+    // Plain extern getenv: the harness runs inside the engine process
+    // (which links libc) and has no access to std.process.Init here.
+    if (getenv("GDZIG_TEST_MODE") == null) return;
 
     runImpl() catch {};
 }
 
+extern fn getenv(name: [*:0]const u8) ?[*:0]u8;
+
 fn runImpl() !void {
     const allocator = gdzig.engine_allocator;
 
+    var threaded = std.Io.Threaded.init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+
     // Get stdin and stdout with buffering
-    const stdin_file = std.fs.File.stdin();
-    const stdout_file = std.fs.File.stdout();
+    const stdin_file = std.Io.File.stdin();
+    const stdout_file = std.Io.File.stdout();
 
     var stdin_buf: [4096]u8 = undefined;
     var stdout_buf: [4096]u8 = undefined;
-    var stdin = std.fs.File.Reader.initStreaming(stdin_file, &stdin_buf);
-    var stdout = std.fs.File.Writer.initStreaming(stdout_file, &stdout_buf);
+    var stdin = stdin_file.reader(io, &stdin_buf);
+    var stdout = stdout_file.writer(io, &stdout_buf);
 
     var line_buf: std.ArrayListUnmanaged(u8) = .empty;
     defer line_buf.deinit(allocator);
@@ -149,7 +153,7 @@ fn runSingleTest(test_fn: std.builtin.TestFn) SingleTestResult {
         return .{ .passed = true, .message = null };
     } else |err| {
         if (@errorReturnTrace()) |trace| {
-            std.debug.dumpStackTrace(trace.*);
+            std.debug.dumpErrorReturnTrace(trace);
         }
         std.debug.print("test failed with error.{s}\n", .{@errorName(err)});
         return .{ .passed = false, .message = null };

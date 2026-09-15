@@ -3,8 +3,8 @@ pub fn build(b: *Build) !void {
     var target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const godot_version = b.option([]const u8, "godot-version", "Download and use this Godot version (e.g. `latest` or `4.5`)");
-    const godot_path = b.option([]const u8, "godot-path", "Directory containing Godot executable [default: $PATH]");
+    const redot_version = b.option([]const u8, "redot-version", "Download and use this Redot version (e.g. `latest` or `26.2`)");
+    const redot_path = b.option([]const u8, "redot-path", "Directory containing Redot executable [default: $PATH]");
     const single_threaded = b.option(bool, "single_threaded", "Target single threaded GdExtension [default: false]") orelse false;
 
     if (!single_threaded and target.result.cpu.arch.isWasm()) {
@@ -16,8 +16,8 @@ pub fn build(b: *Build) !void {
     const gdzig_dep = b.dependency("gdzig", .{
         .target = target,
         .optimize = optimize,
-        .@"godot-version" = godot_version,
-        .@"godot-path" = godot_path,
+        .@"redot-version" = redot_version,
+        .@"redot-path" = redot_path,
     });
 
     // Extension module
@@ -45,13 +45,13 @@ pub fn build(b: *Build) !void {
     b.default_step.dependOn(&install.step);
 
     // Run
-    const run = Build.Step.Run.create(b, "run godot");
-    run.addFileArg(gdzig_dep.namedLazyPath("godot"));
+    const run = Build.Step.Run.create(b, "run redot");
+    run.addFileArg(gdzig_dep.namedLazyPath("redot"));
     run.addArg("--path");
     run.addDirectoryArg(b.path("./project"));
     run.step.dependOn(&install.step);
 
-    const run_step = b.step("run", "Run with Godot");
+    const run_step = b.step("run", "Run with Redot");
     run_step.dependOn(&run.step);
 
     // Tests
@@ -60,11 +60,10 @@ pub fn build(b: *Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    b.step("test", "Run tests in Godot").dependOn(&tests.step);
+    b.step("test", "Run tests in Redot").dependOn(&tests.step);
 }
 
 const std = @import("std");
 const Build = std.Build;
 
 const gdzig = @import("gdzig");
-const godot = @import("godot");

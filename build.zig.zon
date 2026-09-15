@@ -2,12 +2,12 @@
     .name = .godot,
     .version = "0.0.0-dev",
     .fingerprint = 0x74a61aa48e9841ab,
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.16.0",
 
     .dependencies = .{
         .bbcodez = .{
-            .url = "git+https://github.com/gdzig/bbcodez#5a4f5bd131552e7394ef26b01883370eb422eca4",
-            .hash = "bbcodez-0.0.1-dev-YlrOBo-iAQBWdgFSZ5eINgMNAZlmrHLQ35zKSZEEqgS2",
+            .url = "git+https://github.com/gdzig/bbcodez.git#7ca97c0738d274195bcb28ab5c789ee0579abbcf",
+            .hash = "bbcodez-0.0.1-dev-YlrOBmyhAQBdGQs5DI8s5xn5nlRg_KQP-aQfCa9eseZp",
         },
         .casez = .{
             .url = "git+https://github.com/gdzig/casez#9732adbfd8c591ddd6e9c3feab016bf9af779d6c",
@@ -26,9 +26,10 @@
             .url = "git+https://github.com/abhinav/temp.zig#7f0a9697d3d46d06c4f84fc3bc5199b7779fab33",
             .hash = "temp-0.3.0-Ogl1Ff5-AABRtiHj_zDFI0CZVU8ORLPko6iQiw63Znrz",
         },
-        .godot = .{
-            .url = "git+https://github.com/rdzig/redot-versions.git#d382152b8c08a34a042b702af0ceba979fe4851b",
-            .hash = "redot-0.0.0-k73Qf_PwAABHWn752mMBeUheYg5HPMemkwcix_X7RsbV",
+        .redot = .{
+            .path = "../redot-versions"
+            // .url = "git+https://github.com/rdzig/redot-versions.git#0f9f7c3cf3c5bf31edd61fe2611ac76c54c48c2b",
+            // .hash = "redot-0.0.0-k73Qf-79AABeJZuVcdU1JudGjCC_g7SFdSNMjXHe98-O",
         },
     },
 

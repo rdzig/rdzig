@@ -57,6 +57,9 @@ pub fn build(b: *Build, options: BuildOptions) *Build.Step.Compile {
     return b.addExecutable(.{
         .name = "gdzig-bindgen",
         .root_module = mod,
+        // NOTE: LLVM backend required - the 0.16 self-hosted linker chokes on
+        // GCC 16 crt files (R_X86_64_PC64 in .sframe). Matches gdzig_lib.
+        .use_llvm = true,
     });
 }
 

@@ -19,7 +19,6 @@
 //!     const test_step = b.step("test", "Run tests");
 //!     test_step.dependOn(&gdzig.addTest(b, .{
 //!         .root_module = mod,
-//!         .godot_exe = "godot",
 //!     }).step);
 //! }
 //! ```

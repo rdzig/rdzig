@@ -115,7 +115,7 @@ fn addExtensionWeb(
     activate_emsdk.step.dependOn(&install_emsdk.step);
 
     lib.step.dependOn(&activate_emsdk.step);
-    lib.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
+    lib.root_module.addSystemIncludePath(emsdk_path.path(b, "upstream/emscripten/cache/sysroot/include"));
 
     // Run emcc to produce final .wasm
     const optimize = options.optimize;
@@ -171,7 +171,7 @@ fn addExtensionWeb(
     return ext;
 }
 
-/// Options for adding a Godot test.
+/// Options for adding a Redot test.
 pub const TestOptions = struct {
     /// Name for this test (used in output paths).
     name: []const u8 = "test",
@@ -185,7 +185,7 @@ pub const TestOptions = struct {
     initialization_level: InitializationLevel = .scene,
 };
 
-/// Add a Godot integration test to the build.
+/// Add a Redot integration test to the build.
 ///
 /// Tests are discovered from `test {}` blocks in the provided module.
 /// A minimal Godot project is generated automatically.
@@ -225,7 +225,8 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
         .linkage = .dynamic,
         .root_module = b.createModule(.{ .target = options.target, .optimize = options.optimize }),
     });
-    lib.addObject(obj);
+
+    lib.root_module.addObject(obj);
 
     const install_subdir = b.fmt("test/{s}", .{options.name});
     const install_ext = b.addInstallArtifact(lib, .{
@@ -250,7 +251,7 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
     runner_options.addOption([]const []const u8, "test_folders", &.{
         b.fmt("{s}/{s}", .{ b.install_path, install_subdir }),
     });
-    runner_options.addOptionPath("godot_exe", paths.namedLazyPath("godot"));
+    runner_options.addOptionPath("redot_exe", paths.namedLazyPath("redot"));
 
     const coordinator = b.addExecutable(.{
         .name = b.fmt("test-{s}", .{options.name}),
@@ -262,6 +263,9 @@ pub fn addTestImpl(b: *Build, paths: Resolver, options: TestOptions) *Step.Run {
                 .{ .name = "runner_options", .module = runner_options.createModule() },
             },
         }),
+        // NOTE: LLVM backend required - the 0.16 self-hosted linker chokes on
+        // GCC 16 crt files (R_X86_64_PC64 in .sframe).
+        .use_llvm = true,
     });
 
     const run = b.addRunArtifact(coordinator);
