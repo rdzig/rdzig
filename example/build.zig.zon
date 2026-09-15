@@ -8,9 +8,8 @@
             .path = "../",
         },
         .redot = .{
-            // .url = "git+https://github.com/rdzig/redot-versions.git#d382152b8c08a34a042b702af0ceba979fe4851b",
-            // .hash = "redot-0.0.0-k73Qf_PwAABHWn752mMBeUheYg5HPMemkwcix_X7RsbV",
-            .path = "../../redot-versions"
+            .url = "git+https://github.com/rdzig/redot-versions#14b244f50a67e5c9dab83f7132c8b007ae1f5dd0",
+            .hash = "redot-0.0.0-k73QfyAAAQAuCRmxUi9zwR-Kw7ffkB7cF6lYY00YwgCb",
         },
     },
     .paths = .{

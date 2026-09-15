@@ -27,9 +27,8 @@
             .hash = "temp-0.3.0-Ogl1Ff5-AABRtiHj_zDFI0CZVU8ORLPko6iQiw63Znrz",
         },
         .redot = .{
-            .path = "../redot-versions"
-            // .url = "git+https://github.com/rdzig/redot-versions.git#0f9f7c3cf3c5bf31edd61fe2611ac76c54c48c2b",
-            // .hash = "redot-0.0.0-k73Qf-79AABeJZuVcdU1JudGjCC_g7SFdSNMjXHe98-O",
+            .url = "git+https://github.com/rdzig/redot-versions#14b244f50a67e5c9dab83f7132c8b007ae1f5dd0",
+            .hash = "redot-0.0.0-k73QfyAAAQAuCRmxUi9zwR-Kw7ffkB7cF6lYY00YwgCb",
         },
     },
 
